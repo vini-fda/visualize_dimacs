@@ -1,0 +1,10 @@
+[package]
+name = "visualize_dimacs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.33.3"
+egui_graphs = "0.29.0"
+gridgraph_rs = "0.1.0"
+petgraph = "0.8.3"
