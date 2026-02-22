@@ -9,16 +9,18 @@ use eframe::{
     run_native,
 };
 use egui_graphs::{
-    DefaultEdgeShape, DefaultNodeShape, Graph, GraphView, LayoutRandom, LayoutStateRandom,
-    MetadataFrame, SettingsInteraction, SettingsNavigation, SettingsStyle, events::Event,
+    DefaultEdgeShape, DefaultNodeShape, Graph, GraphView, Layout, LayoutState, MetadataFrame,
+    SettingsInteraction, SettingsNavigation, SettingsStyle, events::Event,
 };
 use gridgraph_rs::{DimacsInstance, GridGraphError, GridGraphParams, generate_instance};
 use petgraph::{
     Directed,
+    graph::IndexType,
     stable_graph::{DefaultIx, NodeIndex, StableGraph},
 };
 
 use crossbeam::channel::{self, Receiver, Sender};
+use serde::{Deserialize, Serialize};
 
 const DEFAULT_HEIGHT: i32 = 12;
 const DEFAULT_WIDTH: i32 = 18;
@@ -41,8 +43,8 @@ type GridGraphView<'a> = GraphView<
     DefaultIx,
     DefaultNodeShape,
     DefaultEdgeShape,
-    LayoutStateRandom,
-    LayoutRandom,
+    StaticLayoutState,
+    StaticLayout,
 >;
 
 fn main() -> eframe::Result<()> {
@@ -64,6 +66,7 @@ struct GridGraphApp {
     event_rx: Receiver<Event>,
     selected_edges: HashSet<usize>,
     hovered_edge: Option<usize>,
+    pending_fit: bool,
 }
 
 impl GridGraphApp {
@@ -84,6 +87,7 @@ impl GridGraphApp {
             event_rx,
             selected_edges: HashSet::new(),
             hovered_edge: None,
+            pending_fit: true,
         }
     }
 
@@ -98,6 +102,7 @@ impl GridGraphApp {
                 self.selected_edges.clear();
                 self.hovered_edge = None;
                 self.apply_edge_selection(false);
+                self.pending_fit = true;
             }
             Err(err) => self.last_error = Some(err.to_string()),
         }
@@ -215,8 +220,22 @@ impl App for GridGraphApp {
                 .with_node_selection_enabled(true)
                 .with_edge_clicking_enabled(true)
                 .with_edge_selection_enabled(true);
-            let navigation = SettingsNavigation::new().with_zoom_and_pan_enabled(true);
             let styles = graph_styles();
+
+            ui.horizontal(|ui| {
+                if ui.button("Reset view").clicked() {
+                    self.pending_fit = true;
+                }
+                ui.label("Pan with drag, zoom with cmd/ctrl + scroll.");
+            });
+            ui.separator();
+
+            let mut navigation = SettingsNavigation::new().with_zoom_and_pan_enabled(true);
+            navigation = if self.pending_fit {
+                navigation.with_fit_to_screen_enabled(true)
+            } else {
+                navigation.with_fit_to_screen_enabled(false)
+            };
 
             let mut view = GridGraphView::new(&mut self.graph)
                 .with_id(Some(GRAPH_VIEW_ID.to_string()))
@@ -225,6 +244,10 @@ impl App for GridGraphApp {
                 .with_styles(&styles)
                 .with_event_sink(&self.event_tx);
             let response = ui.add(&mut view);
+
+            if self.pending_fit {
+                self.pending_fit = false;
+            }
 
             self.handle_graph_events();
             self.update_hovered_edge(ui, &response);
@@ -443,4 +466,34 @@ fn graph_styles() -> SettingsStyle {
         }
         stroke
     })
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct StaticLayoutState;
+
+impl LayoutState for StaticLayoutState {}
+
+#[derive(Default)]
+struct StaticLayout;
+
+impl Layout<StaticLayoutState> for StaticLayout {
+    fn next<N, E, Ty, Ix, Dn, De>(&mut self, _g: &mut Graph<N, E, Ty, Ix, Dn, De>, _: &egui::Ui)
+    where
+        N: Clone,
+        E: Clone,
+        Ty: petgraph::EdgeType,
+        Ix: IndexType,
+        Dn: egui_graphs::DisplayNode<N, E, Ty, Ix>,
+        De: egui_graphs::DisplayEdge<N, E, Ty, Ix, Dn>,
+    {
+        // no-op: preserve manually assigned positions
+    }
+
+    fn state(&self) -> StaticLayoutState {
+        StaticLayoutState
+    }
+
+    fn from_state(_: StaticLayoutState) -> impl Layout<StaticLayoutState> {
+        Self::default()
+    }
 }
