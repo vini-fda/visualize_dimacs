@@ -92,7 +92,7 @@ impl GridGraphApp {
     }
 
     fn regenerate(&mut self) {
-        match self.controls.to_params() {
+        match self.controls.as_params() {
             Ok(params) => {
                 let instance = generate_instance(params);
                 self.graph = build_graph(&instance);
@@ -312,7 +312,7 @@ impl From<GridGraphParams> for GridControls {
 }
 
 impl GridControls {
-    fn to_params(&self) -> Result<GridGraphParams, GridGraphError> {
+    fn as_params(&self) -> Result<GridGraphParams, GridGraphError> {
         GridGraphParams::new(
             self.height,
             self.width,
@@ -494,6 +494,6 @@ impl Layout<StaticLayoutState> for StaticLayout {
     }
 
     fn from_state(_: StaticLayoutState) -> impl Layout<StaticLayoutState> {
-        Self::default()
+        StaticLayout
     }
 }
